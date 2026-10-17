@@ -1,0 +1,424 @@
+{
+  "name": "AI Receptionist FAQ Bot (WhatsApp)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## AI Receptionist FAQ Bot (WhatsApp)\n\n**Setup**\n1. Connect a WhatsApp number in Evolution API (scan the QR code).\n2. In Evolution API, set the instance webhook to this workflow's PRODUCTION URL with event MESSAGES_UPSERT.\n3. Open 'Config' and fill in your Evolution server URL, instance name, API key and your own WhatsApp number (country code, no +).\n4. Add credential: OpenAI API.\n5. Edit 'Business Info' with your real hours, prices, location and services.\n6. Replace [YOUR BUSINESS NAME] in 'AI Agent', then activate the workflow.",
+        "height": 320,
+        "width": 480
+      },
+      "id": "n-note",
+      "name": "Setup Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -200
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp-faq-bot",
+        "options": {}
+      },
+      "id": "n-hook",
+      "name": "WhatsApp Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "2e6b9c40-7a15-4f8d-b3c2-1d9a5e7f4b66"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-0",
+              "name": "evolution_url",
+              "value": "https://YOUR-EVOLUTION-SERVER",
+              "type": "string"
+            },
+            {
+              "id": "cfg-1",
+              "name": "instance",
+              "value": "YOUR_INSTANCE_NAME",
+              "type": "string"
+            },
+            {
+              "id": "cfg-2",
+              "name": "api_key",
+              "value": "YOUR_EVOLUTION_API_KEY",
+              "type": "string"
+            },
+            {
+              "id": "cfg-3",
+              "name": "owner_number",
+              "value": "923XXXXXXXXX",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "n-config",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || {};\nconst d = body.data || {};\nconst key = d.key || {};\nconst msg = d.message || {};\nconst text = msg.conversation || (msg.extendedTextMessage && msg.extendedTextMessage.text) || '';\nconst jid = key.remoteJid || '';\nconst eventOk = !body.event || String(body.event).toLowerCase().includes('messages');\nconst skip = !eventOk || key.fromMe === true || jid.endsWith('@g.us') || !jid || !text;\n\nreturn [{\n  json: {\n    jid,\n    number: jid.split('@')[0],\n    name: d.pushName || 'Unknown',\n    text,\n    skip\n  }\n}];"
+      },
+      "id": "n-extract",
+      "name": "Extract Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "c1d2e3f4-skip-4a5b-8c9d-aaaaaaaaaaaa",
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "n-if-skip",
+      "name": "Should Reply?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        660,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1b2c3d4-0001-4000-8000-000000000001",
+              "name": "info",
+              "value": "Business name: [YOUR BUSINESS NAME]\nOpening hours: Monday to Saturday, 9am to 6pm. Closed on Sunday.\nLocation: [YOUR ADDRESS]\nPhone: [YOUR PHONE NUMBER]\nServices and prices:\n- [Service 1]: [price]\n- [Service 2]: [price]\n- [Service 3]: [price]\nPayment methods: [cash, bank transfer, etc.]\nBooking: customers can book by messaging us their preferred day and time.",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "n-info",
+      "name": "Business Info",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        880,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.text }}",
+        "options": {
+          "systemMessage": "=You are a friendly receptionist for [YOUR BUSINESS NAME] on WhatsApp. Answer customer questions using ONLY the business info below. Keep replies short (1-3 sentences) and polite. If the answer is not in the business info, do not guess: tell the customer a team member will get back to them soon and set needs_human to true.\n\nBUSINESS INFO:\n{{ $('Business Info').item.json.info }}\n\nAlways respond with ONLY a JSON object, with no markdown and no extra text, in exactly this shape: {\"reply\": \"message to the customer\", \"needs_human\": false}"
+        }
+      },
+      "id": "n-agent",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini"
+        },
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "id": "n-llm",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        1040,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Extract Message').item.json.jid }}",
+        "contextWindowLength": 10
+      },
+      "id": "n-mem",
+      "name": "Chat Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        1220,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst raw = item.output || item.text || '';\nconst ex = $('Extract Message').first().json;\n\nlet data;\ntry {\n  const match = raw.match(/\\{[\\s\\S]*\\}/);\n  data = JSON.parse(match ? match[0] : raw);\n} catch (e) {\n  data = { reply: raw || 'Sorry, could you say that again?' };\n}\n\nreturn [{\n  json: {\n    number: ex.number,\n    customer_name: ex.name,\n    customer_message: ex.text,\n    reply: data.reply || '',\n    needs_human: data.needs_human === true\n  }\n}];"
+      },
+      "id": "n-parse",
+      "name": "Parse AI Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1380,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.evolution_url }}/message/sendText/{{ $('Config').first().json.instance }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $('Config').first().json.api_key }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ number: $json.number, text: $json.reply }) }}",
+        "options": {}
+      },
+      "id": "n-reply",
+      "name": "Send Reply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1640,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "c1d2e3f4-uman-4a5b-8c9d-aaaaaaaaaaaa",
+              "leftValue": "={{ $json.needs_human }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "n-if-human",
+      "name": "Needs Human?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1640,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.evolution_url }}/message/sendText/{{ $('Config').first().json.instance }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $('Config').first().json.api_key }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ number: $('Config').first().json.owner_number, text: 'Customer needs a human\\nName: ' + $json.customer_name + '\\nWhatsApp: +' + $json.number + '\\nMessage: ' + $json.customer_message }) }}",
+        "options": {}
+      },
+      "id": "n-alert",
+      "name": "Alert Owner",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1900,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "WhatsApp Webhook": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Extract Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Message": {
+      "main": [
+        [
+          {
+            "node": "Should Reply?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Reply?": {
+      "main": [
+        [
+          {
+            "node": "Business Info",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Business Info": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Reply": {
+      "main": [
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Needs Human?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Human?": {
+      "main": [
+        [
+          {
+            "node": "Alert Owner",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}
